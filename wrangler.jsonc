@@ -17,6 +17,10 @@
     // Every request, page included, goes through the token check first.
     "run_worker_first": true
   },
+  // Phase 3's gigs, members and requests. Created 2026-10-01 (Eastern North America). The
+  // Worker creates and migrates its own tables (src/schema.ts), so a deploy needs no D1
+  // permission on the token: with the id given, deploying only binds it.
+  "d1_databases": [{ "binding": "DB", "database_name": "vinyl-crates", "database_id": "3f6815c4-12c4-40ed-8459-406407af2408" }],
   "r2_buckets": [{ "binding": "CATALOG", "bucket_name": "vinyl-crates-catalog" }],
   "observability": { "enabled": true },
   "vars": {
@@ -24,6 +28,8 @@
     "TEAM_DOMAIN": "bobshrimp.cloudflareaccess.com",
     "ACCESS_AUD_SITE": "449c5949d1a66c303d8c2810c1422339406da3e30b1e87b3408d209525e67981",
     "ACCESS_AUD_ADMIN": "54c803238fef2e566b2b73336626e2a91acf2454e9db9b1aec4e2a10e7650cfb",
-    "PUBLISHER_CLIENT_ID": "470dfdafd1886e519aff4b7e96dd2e71.access"
+    "PUBLISHER_CLIENT_ID": "470dfdafd1886e519aff4b7e96dd2e71.access",
+    // The DJ: sees every list, owns /dj. Also allowed in by the "Crates visitors" policy.
+    "OWNER_EMAIL": "dschifman@gmail.com"
   }
 }

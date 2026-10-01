@@ -1,10 +1,14 @@
 // Shared test fixtures: an Access team with a real RSA key, signed tokens,
-// an in-memory R2 bucket and a stand-in for the static-assets binding.
+// an in-memory R2 bucket, a D1 over real SQLite (d1.mjs) and a stand-in for
+// the static-assets binding.
+
+import { MemoryD1 } from "./d1.mjs";
 
 export const TEAM = "crates-test.cloudflareaccess.com";
 export const AUD_SITE = "a".repeat(64);
 export const AUD_ADMIN = "b".repeat(64);
 export const PUBLISHER = "publisher-client-id.access";
+export const OWNER = "dj@example.com";
 
 const enc = new TextEncoder();
 
@@ -85,6 +89,9 @@ export function assets() {
           headers: { "Content-Type": "text/html; charset=utf-8", ETag: '"page"', "Cache-Control": "public, max-age=3600" },
         });
       }
+      if (["/dj", "/dj/", "/dj.html", "/dj.js", "/dj.css"].includes(path)) {
+        return new Response("the DJ's page", { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
       return new Response("not found", { status: 404 });
     },
   };
@@ -94,6 +101,8 @@ export function env(overrides = {}) {
   return {
     ASSETS: assets(),
     CATALOG: new MemoryR2(),
+    DB: new MemoryD1(),
+    OWNER_EMAIL: OWNER,
     TEAM_DOMAIN: TEAM,
     ACCESS_AUD_SITE: AUD_SITE,
     ACCESS_AUD_ADMIN: AUD_ADMIN,
@@ -110,4 +119,20 @@ export async function gzipJson(obj) {
 export async function sha256Hex(bytes) {
   const d = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// The page's way of calling the API: JSON, and the X-Crates header on writes.
+export function caller(worker, e, token) {
+  return async (method, path, body) => {
+    const headers = new Headers({ "Cf-Access-Jwt-Assertion": await token });
+    if (method !== "GET") {
+      headers.set("X-Crates", "1");
+      if (body !== undefined) headers.set("Content-Type", "application/json");
+    }
+    const res = await worker.fetch(new Request(`https://crates.bobshrimp.com${path}`, {
+      method, headers, body: body === undefined ? undefined : JSON.stringify(body),
+    }), e);
+    const type = res.headers.get("Content-Type") || "";
+    return { status: res.status, body: type.includes("json") ? await res.json() : await res.text(), headers: res.headers };
+  };
 }

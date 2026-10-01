@@ -26,6 +26,11 @@ before the command. That includes PR bodies and docs. The machines are:
 `client_catalog.py` and PUTs to `/api/admin/catalog` with the Access service token
 `dj-catalog-publisher`.
 
+Phase 3's lists live in the D1 database `vinyl-crates` (id in `wrangler.jsonc`). The
+Living Room mini pulls `/api/admin/invites`, `/changes` and `/purge` with the same
+service token. It applies invites to the Access group and sends the change pushes; that
+code is in vinyl-command.
+
 ## Invariants (each has a test)
 
 - **Fail closed.** Every request, assets included (`run_worker_first: true`), must carry a
@@ -48,6 +53,24 @@ before the command. That includes PR bodies and docs. The machines are:
   `'self'` only: no CDNs, fonts, analytics or inline script.
 - **`public/search.js` `norm()` mirrors vinyl-command `client_catalog.norm()`.** Change
   both together, or keys and typing fold differently.
+- **The Worker migrates its own D1 schema** (`src/schema.ts`, `test/schema.test.mjs`).
+  Migrations are append-only: never edit or reorder one that has shipped; add the next
+  id. Each runs in one batch, and two isolates racing are fine. Don't move this back into
+  a wrangler step: this way the deploy token needs no D1 permission.
+- **Writes need `X-Crates: 1` and a JSON body** (`readJson` in `src/http.ts`). That is the
+  CSRF guard. DELETE has no body, so it checks the header itself.
+- **`/dj`, `/dj.js`, `/dj.css` and `/api/dj/*` are `OWNER_EMAIL`'s alone** (`DJ_PAGES` in
+  `src/worker.ts`). Anyone else gets a 404 for the page and a 403 for the API.
+- **A client changes only their own requests**, only while the list is open. They read
+  only the lists of people on the same gig. `publicRequest()` strips emails, so a request
+  never carries one to the page.
+- **The merge is section 5.3 of the design, exactly** (`src/merge.ts`). The worked example,
+  Kiss = 5.8, is a test. Only current members count. A host's *Please don't* vetoes; a
+  planner's flags.
+- **Deletes are soft and every write is in `changes`.** The feed has to carry a removal.
+- **A missed search keeps no identity**: just the day, the folded words and a count.
+- **The token that edits Access never sits in this Worker.** An invite is a row; the
+  Living Room mini applies it.
 - **The snapshot schema (v1) is owned by vinyl-command** (`client_catalog.build()`):
   - songs: `k` key, `a` artist, `t` title, `y` original year, `b` genre buckets, `v`
     versions as `[release id, position, mix, seconds, credits]`, `m` occasion moments
@@ -61,8 +84,8 @@ before the command. That includes PR bodies and docs. The machines are:
 
 ## Versioning
 
-`VERSION` in `src/worker.ts` is a single running counter (1.0 → 1.1 → 1.2). Bump it in
-every PR that changes behaviour, and name it in the commit subject as `(crates 1.1)`.
+`VERSION` in `src/version.ts` is a single running counter (1.0 → 1.1 → 1.2). Bump it once
+in every PR that changes behaviour, and name it in the commit subject as `(crates 1.2)`.
 Docs-only PRs bump nothing. The page footer shows it, from `/api/me`, and every response
 carries `X-Crates-Version`.
 

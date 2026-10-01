@@ -4,9 +4,12 @@
 // Phase 2, "clients can browse":
 //   GET  /                     the page (public/), searched in the browser
 //   GET  /api/catalog          the current snapshot: gzip JSON, ETag = its hash
-//   GET  /api/me               who is signed in
 //   PUT  /api/admin/catalog    the Living Room mini publishes a new snapshot
 //   GET  /api/admin/status     what is live, for the publisher
+// Phase 3, "clients request and rank" (D1, which the Worker migrates itself: src/schema.ts):
+//   /api/me, /api/list, /api/requests, /api/misses     a client's lists (src/lists.ts)
+//   /dj and /api/dj/*                                   the DJ's view, OWNER_EMAIL only (src/dj.ts)
+//   /api/admin/invites|changes|purge                    what the Living Room mini pulls (src/feed.ts)
 //
 // Every request -- page, assets and API alike -- must carry a valid Access
 // token for the right application (src/access.ts). Nothing is served before
@@ -15,19 +18,26 @@
 // a request); it checks the upload's checksum and stores the bytes as sent.
 
 import { verifyAccessJwt, type AccessClaims } from "./access.ts";
+import { HttpError, secure, json, text, hex } from "./http.ts";
+import { isOwner, listsRoute } from "./lists.ts";
+import { djRoute } from "./dj.ts";
+import { feedRoute } from "./feed.ts";
+import { ensureSchema } from "./schema.ts";
 
 export interface Env {
   ASSETS: Fetcher;
   CATALOG: R2Bucket;
+  DB: D1Database;               // gigs, members, requests, invites, changes, misses
+  OWNER_EMAIL: string;          // the DJ: sees every list, and /dj
   TEAM_DOMAIN: string;          // <team>.cloudflareaccess.com
   ACCESS_AUD_SITE: string;      // AUD tag of the "Crates" Access application
   ACCESS_AUD_ADMIN: string;     // AUD tag of the "Crates publisher" application (/api/admin)
   PUBLISHER_CLIENT_ID: string;  // Client ID of the dj-catalog-publisher service token
 }
 
-// One running counter, bumped by every PR that changes behaviour (the same rule as
-// vinyl-command's api/worker and the iOS app). The page shows it in its footer.
-export const VERSION = "1.2";
+import { VERSION } from "./version.ts";
+export { VERSION };
+export { SECURITY_HEADERS } from "./http.ts";
 
 export const CURRENT_KEY = "current.json";
 export const SNAPSHOT_PREFIX = "snapshots/";
@@ -35,20 +45,6 @@ export const KEEP_SNAPSHOTS = 10;
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const HASH_RE = /^sha256:[0-9a-f]{64}$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
-
-export const SECURITY_HEADERS: Record<string, string> = {
-  "Content-Security-Policy":
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
-    "manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "no-referrer",
-  "X-Frame-Options": "DENY",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "same-origin",
-  "Strict-Transport-Security": "max-age=31536000",
-  "X-Robots-Tag": "noindex, nofollow",
-};
 
 export interface Current {
   hash: string;
@@ -59,33 +55,8 @@ export interface Current {
   counts: Record<string, unknown>;
 }
 
-function secure(extra: Record<string, string> = {}): Headers {
-  const h = new Headers(extra);
-  for (const [k, v] of Object.entries(SECURITY_HEADERS)) h.set(k, v);
-  h.set("X-Crates-Version", VERSION);
-  return h;
-}
-
-function json(status: number, body: unknown, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: secure({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extra }),
-  });
-}
-
-function text(status: number, body: string): Response {
-  return new Response(body + "\n", {
-    status,
-    headers: secure({ "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }),
-  });
-}
-
 function configured(env: Env): boolean {
   return Boolean(env.TEAM_DOMAIN && env.ACCESS_AUD_SITE && env.ACCESS_AUD_ADMIN && env.PUBLISHER_CLIENT_ID);
-}
-
-function hex(buf: ArrayBuffer): string {
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function readCurrent(env: Env): Promise<Current | null> {
@@ -220,15 +191,40 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (url.pathname === "/api/admin/status" && request.method === "GET") {
       return json(200, (await readCurrent(env)) ?? { hash: null });
     }
-    return json(404, { error: "Not found." });
+    return (await answer(env, () => feedRoute(env, request, url))) ?? json(404, { error: "Not found." });
   }
 
   if (!claims.email) return text(403, "Sign in required.");   // a service token is not a visitor
+  const email = claims.email.trim().toLowerCase();
+  if (url.pathname === "/api/catalog") {
+    if (request.method !== "GET" && request.method !== "HEAD") return text(405, "Method not allowed.");
+    return getCatalog(request, env);
+  }
+  if (url.pathname.startsWith("/api/dj/")) {
+    if (!isOwner(env, email)) return json(403, { error: "This is the DJ's view." });
+    return (await answer(env, () => djRoute(env, request, url, email))) ?? json(404, { error: "Not found." });
+  }
+  if (url.pathname.startsWith("/api/")) {
+    return (await answer(env, () => listsRoute(env, request, url, email))) ?? json(404, { error: "Not found." });
+  }
   if (request.method !== "GET" && request.method !== "HEAD") return text(405, "Method not allowed.");
-  if (url.pathname === "/api/catalog") return getCatalog(request, env);
-  if (url.pathname === "/api/me") return json(200, { email: claims.email, version: VERSION });
-  if (url.pathname.startsWith("/api/")) return json(404, { error: "Not found." });
+  // The DJ's page is only the DJ's to load (its data calls are owner-only anyway).
+  if (DJ_PAGES.has(url.pathname) && !isOwner(env, email)) return text(404, "Not found.");
   return serveAsset(request, env);
+}
+
+const DJ_PAGES = new Set(["/dj", "/dj/", "/dj.html", "/dj.js", "/dj.css"]);
+
+// The database routes: the schema first, then the route. A refusal (HttpError) becomes
+// a JSON answer the page can show; anything else is a 500.
+async function answer(env: Env, fn: () => Promise<Response | null>): Promise<Response | null> {
+  try {
+    await ensureSchema(env.DB);
+    return await fn();
+  } catch (e) {
+    if (e instanceof HttpError) return json(e.status, { error: e.message });
+    throw e;
+  }
 }
 
 export default {

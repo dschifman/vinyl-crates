@@ -1,0 +1,144 @@
+/* dj.css -- the DJ's view (/dj). Loaded after style.css, and uses its tokens. */
+
+:root { --ok: #e2efe0; --ok-ink: #2f5b2a; }
+@media (prefers-color-scheme: dark) {
+  :root { --ok: #1e2b1c; --ok-ink: #a6d79c; }
+}
+
+.brand .home { margin-left: auto; font-size: 14px; text-decoration: none; padding: 6px 0; }
+.tabs { display: flex; gap: 6px; margin-top: 8px; }
+.tabs a {
+  font-size: 14px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  background: var(--chip);
+  color: var(--text);
+  text-decoration: none;
+}
+.tabs a[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+
+.djmain { padding: 4px 16px 24px; }
+.djmain h2 { margin: 14px 0 4px; font-size: 20px; }
+.djmain h3, .djmain h4 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.djmain h4 { margin-top: 18px; }
+.djmain .subhead { margin-top: 20px; color: var(--muted); }
+.sec { margin-top: 22px; }
+.sechead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tools { display: flex; gap: 8px; }
+a.quiet, a.back { display: inline-block; text-decoration: none; }
+.fold > summary { cursor: pointer; color: var(--accent); padding: 6px 0; }
+.fold { margin-top: 8px; }
+
+.cards { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.card > a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.card .line { justify-content: space-between; }
+.card .a { color: var(--muted); font-size: 14px; opacity: 1; }
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 12px;
+  margin: 8px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.form .field input, .form .field select {
+  font: inherit;
+  font-size: 16px;                /* under 16px, iOS zooms the page on focus */
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  min-width: 0;
+}
+.form .field.wide, .form .actions { grid-column: 1 / -1; }
+
+.gighead h2 { margin-bottom: 2px; }
+.gighead .when { margin: 0; color: var(--muted); }
+.gighead .actions { margin-top: 8px; flex-wrap: wrap; }
+
+.people { list-style: none; margin: 8px 0 0; padding: 0; }
+/* The buttons sit beside the name, or drop below it when an email is too long to share a phone's width. */
+.person {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.person .body { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.person .a { color: var(--muted); font-size: 14px; opacity: 1; }
+.person .ctl { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.person .extra { flex-basis: 100%; }
+.person .extra .form { margin-top: 4px; }
+.badge {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: var(--radius);
+  background: var(--chip);
+  color: var(--muted);
+}
+.badge.ok { background: var(--ok); color: var(--ok-ink); }
+.badge.warn { background: var(--tag); color: var(--tag-ink); }
+
+.mlist { list-style: none; margin: 8px 0 0; padding: 0; }
+.msong {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 2px 8px;
+  align-items: start;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.msong .rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+.msong .body { min-width: 0; overflow-wrap: anywhere; }
+.msong .who, .msong .meta { color: var(--muted); font-size: 14px; }
+.msong .note { font-size: 14px; white-space: pre-line; }
+.msong .score { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+table.plain { width: 100%; border-collapse: collapse; font-size: 15px; margin-top: 8px; }
+table.plain th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+table.plain th, table.plain td { padding: 7px 8px 7px 0; border-bottom: 1px solid var(--line); }
+table.plain .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.plain td:first-child { overflow-wrap: anywhere; }
+
+/* Printing a gig gives its name and the merged list, in black on white. */
+@media print {
+  :root {
+    --bg: #fff; --surface: #fff; --text: #000; --muted: #444; --line: #bbb;
+    --accent: #000; --chip: #fff; --tag: #fff; --tag-ink: #000;
+  }
+  .top, .foot, .noprint, .back { display: none !important; }
+  .djmain { padding: 0; }
+  .msong { break-inside: avoid; }
+  .badge { border: 1px solid #000; }
+}

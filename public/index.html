@@ -15,6 +15,7 @@
     <div class="brand">
       <h1>Crates</h1>
       <p class="sub" id="sub">Loading the catalog…</p>
+      <button class="mylist" id="mylist" type="button" aria-pressed="false" hidden>My list</button>
     </div>
     <div class="searchbar">
       <input id="q" type="search" placeholder="Search songs, artists, mixes…" autocomplete="off"
@@ -23,7 +24,7 @@
     </div>
   </header>
 
-  <main>
+  <main id="catalog">
     <section class="filters" id="filters" aria-label="Filters"></section>
     <div class="status">
       <p class="count" id="count" aria-live="polite"></p>
@@ -35,8 +36,13 @@
     <button class="more" id="more" type="button" hidden>Show more</button>
   </main>
 
+  <main id="listview" class="listview" hidden>
+    <button class="back" id="listback" type="button">‹ Back to the crates</button>
+    <div id="listview-body"></div>
+  </main>
+
   <footer class="foot">
-    <p><span id="who"></span><a href="/cdn-cgi/access/logout">Sign out</a></p>
+    <p><span id="who"></span><a href="/cdn-cgi/access/logout">Sign out</a><span id="djlink" hidden> · <a href="/dj">DJ view</a></span></p>
     <p>Track listings, credits and dates from <a href="https://www.discogs.com" target="_blank" rel="noopener noreferrer">Discogs</a><span id="version"></span></p>
   </footer>
 </body>
