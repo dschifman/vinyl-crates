@@ -575,6 +575,13 @@ function peopleView() {
     if (i.updated_at) body.append(el("div", "a", `changed ${day(i.updated_at, { year: false })}`));
     const ctl = el("div", "ctl");
     if (i.action === "add") {
+      if (i.state === "failed") {
+        ctl.append(act("Try again", "icon text", async () => {
+          await api("POST", "/api/dj/invites", { email: i.email });
+          toast("Trying again.", "ok");
+          await refresh();
+        }));
+      }
       ctl.append(act("Revoke", "icon text", async () => {
         if (!confirm(`Stop ${i.email} signing in? They are signed out everywhere, too.`)) return;
         await api("POST", "/api/dj/access/remove", { email: i.email });
