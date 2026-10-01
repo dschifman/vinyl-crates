@@ -21,9 +21,9 @@
   "observability": { "enabled": true },
   "vars": {
     // vinyl-command tools/crates_access.py setup prints all four.
-    "TEAM_DOMAIN": "",
-    "ACCESS_AUD_SITE": "",
-    "ACCESS_AUD_ADMIN": "",
-    "PUBLISHER_CLIENT_ID": ""
+    "TEAM_DOMAIN": "bobshrimp.cloudflareaccess.com",
+    "ACCESS_AUD_SITE": "449c5949d1a66c303d8c2810c1422339406da3e30b1e87b3408d209525e67981",
+    "ACCESS_AUD_ADMIN": "54c803238fef2e566b2b73336626e2a91acf2454e9db9b1aec4e2a10e7650cfb",
+    "PUBLISHER_CLIENT_ID": "470dfdafd1886e519aff4b7e96dd2e71.access"
   }
 }
