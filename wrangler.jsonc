@@ -1,0 +1,29 @@
+// Crates -- deployed by .github/workflows/deploy.yml when main moves.
+// Nothing is served until the four vars below are filled in: the Worker
+// answers 503 to every request until it can verify Cloudflare Access tokens.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vinyl-crates",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-25",
+  // Only the custom domain, which Cloudflare Access guards. A workers.dev or
+  // preview URL would be an unguarded second door.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "crates.bobshrimp.com", "zone_name": "bobshrimp.com", "custom_domain": true }],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Every request, page included, goes through the token check first.
+    "run_worker_first": true
+  },
+  "r2_buckets": [{ "binding": "CATALOG", "bucket_name": "vinyl-crates-catalog" }],
+  "observability": { "enabled": true },
+  "vars": {
+    // vinyl-command tools/crates_access.py setup prints all four.
+    "TEAM_DOMAIN": "",
+    "ACCESS_AUD_SITE": "",
+    "ACCESS_AUD_ADMIN": "",
+    "PUBLISHER_CLIENT_ID": ""
+  }
+}

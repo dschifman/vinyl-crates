@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>Crates</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>Crates</h1>
+      <p class="sub" id="sub">Loading the catalog…</p>
+    </div>
+    <div class="searchbar">
+      <input id="q" type="search" placeholder="Search songs, artists, mixes…" autocomplete="off"
+             autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="search"
+             aria-label="Search songs, artists and mixes" disabled>
+    </div>
+  </header>
+
+  <main>
+    <section class="filters" id="filters" aria-label="Filters"></section>
+    <div class="status">
+      <p class="count" id="count" aria-live="polite"></p>
+      <button class="clear" id="clear" type="button" hidden>Clear filters</button>
+    </div>
+    <p class="notice" id="notice" hidden></p>
+    <ol class="songs" id="songs"></ol>
+    <p class="empty" id="empty" hidden>No songs match. Try fewer words, or clear a filter.</p>
+    <button class="more" id="more" type="button" hidden>Show more</button>
+  </main>
+
+  <footer class="foot">
+    <p><span id="who"></span><a href="/cdn-cgi/access/logout">Sign out</a></p>
+    <p>Track listings, credits and dates from <a href="https://www.discogs.com" target="_blank" rel="noopener noreferrer">Discogs</a><span id="version"></span></p>
+  </footer>
+</body>
+</html>
