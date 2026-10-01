@@ -55,7 +55,10 @@ exists and runs `wrangler deploy`.
 
 ## Setup (once)
 
-Each step says where it happens.
+Each step says where it happens. Commands for the Living Room mini (.249) log in to it
+themselves, so they paste into the Terminal on any Mac at home. If that Terminal is
+already logged in to the Living Room mini, type only the part inside the quotes. Away from
+home, run `ssh vinyl-mini` first and paste the same command there.
 
 1. **This repo** exists and the Claude GitHub app can reach it.
 2. **The deploy key** goes in the browser, then GitHub:
@@ -69,45 +72,76 @@ Each step says where it happens.
 3. **Merge the vinyl-command PR** that adds the publisher and the tools. It deploys itself
    to the Living Room mini. Publishing stays off until step 5.
 4. **The Access key** goes in the browser, then the Living Room mini:
-   - Under **My Profile → API Tokens → Create Token → Create Custom Token**, give it three
-     Account permissions, all **Edit**: *Access: Apps and Policies*, *Access: Service
-     Tokens*, and *Access: Organizations, Identity Providers, and Groups*. Set **Account
-     Resources** to your account, then create the token.
-   - Then, on the Living Room mini (.249), from any terminal:
+   - In dash.cloudflare.com, under **My Profile → API Tokens → Create Token → Create Custom
+     Token**, give it three Account permissions, all **Edit**: *Access: Apps and
+     Policies*, *Access: Service Tokens*, and *Access: Organizations, Identity Providers,
+     and Groups*. Set **Account Resources** to your account, then create the token and
+     copy it. The Account ID is the same one as in step 2.
+   - Run this in the Terminal on any Mac at home. It logs in to the Living Room mini
+     (.249) and asks for the two values:
      ```
-     ssh dschifman@192.168.1.249
-     cd ~/VinylID && ./venv/bin/python tools/set_secret.py CF_ACCESS_API_TOKEN CF_ACCOUNT_ID
+     ssh -t dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/set_secret.py CF_ACCESS_API_TOKEN CF_ACCOUNT_ID'
      ```
-     Paste each value at its prompt. Nothing is shown on screen.
-5. **Create the Access pieces.** Claude can run this over SSH. On the Living Room mini
-   (.249):
-   ```
-   cd ~/VinylID && ./venv/bin/python tools/crates_access.py setup --owner-email OWNER_EMAIL
-   cd ~/VinylID && ./venv/bin/python tools/crates_access.py setup --owner-email OWNER_EMAIL --apply
-   ```
-   The first command shows the plan; the second applies it. It prints the four
-   `wrangler.jsonc` vars. None of them is a secret.
+     At each prompt, paste the value and press Enter. Nothing shows on screen. It ends with
+     `saved CF_ACCESS_API_TOKEN, CF_ACCOUNT_ID to … (values not shown)`. Never type a value
+     into the command itself: the shell would keep it in its history.
+   - To check, in the Terminal on any Mac at home (both lines should say `set`):
+     ```
+     ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/set_secret.py --check CF_ACCESS_API_TOKEN CF_ACCOUNT_ID'
+     ```
+5. **Create the Access pieces.** Claude can run this over SSH.
+   - To see the plan, run this in the Terminal on any Mac at home. It changes nothing:
+     ```
+     ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py setup --owner-email OWNER_EMAIL'
+     ```
+   - To apply it, in the Terminal on any Mac at home:
+     ```
+     ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py setup --owner-email OWNER_EMAIL --apply'
+     ```
+     It prints the four `wrangler.jsonc` vars, none of which is a secret. The service
+     token's secret goes straight into `secrets.json` on the Living Room mini and is never
+     shown.
 6. **Put the vars into `wrangler.jsonc`** in a PR and merge it. The site comes up, and
    within one maintainer cycle (~5 min) the Living Room mini publishes the catalog.
    `/system/health` there shows `crates_ok: true`.
-7. **Invite someone and try it on a phone.** On the Living Room mini (.249):
+7. **Invite someone and try it on a phone.** In the Terminal on any Mac at home:
    ```
-   cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients add someone@example.com --apply
+   ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients add someone@example.com --apply'
    ```
 
 ## Running it
 
-All of these run on the Living Room mini (.249):
+Each command here runs on the Living Room mini (.249) and pastes into the Terminal on any
+Mac at home.
 
-| | |
-|---|---|
-| Who may sign in | `cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients list` |
-| Invite a client | `cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients add EMAIL --apply` |
-| Remove a client (signs them out too) | `cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients remove EMAIL --apply` |
-| Is the catalog current? | `/system/health` → `crates_ok`, `crates_published_at`, `crates_error` |
-| Publish now / preview | `cd ~/VinylID && ./venv/bin/python client_catalog_publish.py [--dry-run]` |
-| New publisher secret | `cd ~/VinylID && ./venv/bin/python tools/crates_access.py setup --owner-email OWNER_EMAIL --rotate-publisher --apply` |
-
+- **Who may sign in.** In the Terminal on any Mac at home:
+  ```
+  ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients list'
+  ```
+- **Invite a client.** In the Terminal on any Mac at home:
+  ```
+  ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients add EMAIL --apply'
+  ```
+- **Remove a client.** This signs them out everywhere too. In the Terminal on any Mac at
+  home:
+  ```
+  ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients remove EMAIL --apply'
+  ```
+- **Is the catalog current?** `/system/health` on the Living Room mini carries
+  `crates_ok`, `crates_published_at` and `crates_error`. In the Terminal on any Mac at
+  home:
+  ```
+  ssh dschifman@192.168.1.249 'curl -s -H "X-Vinyl-Token: $(python3 -c "import json;print(json.load(open(\"$HOME/VinylID/secrets.json\"))[\"API_AUTH_TOKEN\"])")" localhost:8000/system/health | python3 -m json.tool | grep crates_'
+  ```
+- **Publish now.** Add `--dry-run` to build and compare without sending. In the Terminal
+  on any Mac at home:
+  ```
+  ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python client_catalog_publish.py'
+  ```
+- **A new publisher secret.** In the Terminal on any Mac at home:
+  ```
+  ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py setup --owner-email OWNER_EMAIL --rotate-publisher --apply'
+  ```
 - **Seats.** The free plan has 50 seats. A seat is taken at a person's first sign-in and is
   freed when its idle time runs out, or by hand under Zero Trust → Users.
 - **Roll back the site** by reverting the merge, or in the Cloudflare dashboard under
