@@ -55,6 +55,9 @@ exists and runs `wrangler deploy`.
 
 ## Setup (once)
 
+**Done on 2026-10-01.** The site went live that day. The steps stay here for a rebuild, in
+another account or after a teardown.
+
 Each step says where it happens. Commands for the Living Room mini (.249) log in to it
 themselves, so they paste into the Terminal on any Mac at home. If that Terminal is
 already logged in to the Living Room mini, type only the part inside the quotes. Away from
@@ -69,6 +72,10 @@ home, run `ssh vinyl-mini` first and paste the same command there.
    - Copy the **Account ID** from the right-hand column of any domain's Overview page.
    - In GitHub, under this repo's **Settings → Secrets and variables → Actions → New
      repository secret**, add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+   - In dash.cloudflare.com, switch on **R2 Object Storage** once for the account (the free
+     plan is enough; it may ask for a payment method). Until then the deploy stops at "The
+     R2 bucket exists" with `Please enable R2 through the Cloudflare Dashboard. [code:
+     10042]`.
 3. **Merge the vinyl-command PR** that adds the publisher and the tools. It deploys itself
    to the Living Room mini. Publishing stays off until step 5.
 4. **The Access key** goes in the browser, then the Living Room mini:
@@ -104,6 +111,10 @@ home, run `ssh vinyl-mini` first and paste the same command there.
 6. **Put the vars into `wrangler.jsonc`** in a PR and merge it. The site comes up, and
    within one maintainer cycle (~5 min) the Living Room mini publishes the catalog.
    `/system/health` there shows `crates_ok: true`.
+   - For a minute or two after the Access pieces, the custom domain or a new version are
+     created, some requests get a Cloudflare 500 page, an Access redirect or the old
+     version while the change propagates. That happened on 2026-10-01 and cleared by
+     itself. A publish that fails then is retried 30 minutes later.
 7. **Invite someone and try it on a phone.** In the Terminal on any Mac at home:
    ```
    ssh dschifman@192.168.1.249 'cd ~/VinylID && ./venv/bin/python tools/crates_access.py clients add someone@example.com --apply'
