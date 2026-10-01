@@ -51,7 +51,10 @@ before the command. That includes PR bodies and docs. The machines are:
 - **The snapshot schema (v1) is owned by vinyl-command** (`client_catalog.build()`):
   - songs: `k` key, `a` artist, `t` title, `y` original year, `b` genre buckets, `v`
     versions as `[release id, position, mix, seconds, credits]`, `m` occasion moments
-  - `releases`: `a`, `t`, `y`, `py` pressing year, `f` format, `l` label, `c` catno, `b`
+  - `releases`: `a`, `t`, `y`, `py` pressing year, `f` format, `l` label, `c` catno, `b`,
+    `s` style indexes (api 5.63; absent when the record has none)
+  - `styles`: `[{n: name, b: [buckets]}]`, the style dropdown's table (api 5.63). The page
+    must work without it: a catalog published before then has no styles
   - plus `buckets`, `occasions`, `counts`, `hash` and `built_at`
 
   Read it from that code, not from memory.

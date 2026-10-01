@@ -6,17 +6,24 @@ import { norm, buildIndex, search, editDistance } from "../public/search.js";
 const SNAP = {
   schema: 1,
   buckets: ["Disco & Boogie", "Pop", "Soundtracks & Other"],
+  styles: [
+    { n: "Disco", b: ["Disco & Boogie"] },              // 0
+    { n: "Hi NRG", b: ["Disco & Boogie", "Pop"] },      // 1: a style under two genres
+    { n: "Pop Rock", b: ["Pop"] },                      // 2
+    { n: "Soundtrack", b: ["Soundtracks & Other"] },    // 3
+    { n: "Nobody Has This", b: ["Pop"] },               // 4: no song carries it
+  ],
   occasions: [
     { name: "Wedding", moments: ["First dance", "Parent dances", "Hora & Jewish favorites", "Group dances"] },
     { name: "Bar & Bat Mitzvah", moments: ["Parent dances", "Hora & Jewish favorites", "Group dances"] },
   ],
   releases: {
-    "1": { a: "Donna Summer", t: "I Feel Love", y: 1977, py: 1977, f: '12"', l: "Casablanca", c: "NBD 20104", b: ["Disco & Boogie"] },
-    "2": { a: "Sylvester", t: "Step II", y: 1978, py: 1978, f: "LP", l: "Fantasy", c: "F-9556", b: ["Disco & Boogie"] },
-    "3": { a: "Beyoncé", t: "Crazy In Love", y: 2003, py: 2003, f: '12"', l: "Columbia", c: "44 76869", b: ["Pop"] },
-    "4": { a: "Village People", t: "Cruisin'", y: 1978, py: 1978, f: "LP", l: "Casablanca", c: "NBLP 7118", b: ["Disco & Boogie"] },
-    "5": { a: "Topol", t: "Fiddler On The Roof", y: 1971, py: 1971, f: "LP", l: "United Artists", c: "UAS 10900", b: ["Soundtracks & Other"] },
-    "6": { a: "Various", t: "Disco Classics", y: 1990, py: 1990, f: "LP", l: "Salsoul", c: "SAL 1", b: ["Disco & Boogie"] },
+    "1": { a: "Donna Summer", t: "I Feel Love", y: 1977, py: 1977, f: '12"', l: "Casablanca", c: "NBD 20104", b: ["Disco & Boogie"], s: [0, 1] },
+    "2": { a: "Sylvester", t: "Step II", y: 1978, py: 1978, f: "LP", l: "Fantasy", c: "F-9556", b: ["Disco & Boogie"], s: [0] },
+    "3": { a: "Beyoncé", t: "Crazy In Love", y: 2003, py: 2003, f: '12"', l: "Columbia", c: "44 76869", b: ["Pop"], s: [2] },
+    "4": { a: "Village People", t: "Cruisin'", y: 1978, py: 1978, f: "LP", l: "Casablanca", c: "NBLP 7118", b: ["Disco & Boogie"], s: [0] },
+    "5": { a: "Topol", t: "Fiddler On The Roof", y: 1971, py: 1971, f: "LP", l: "United Artists", c: "UAS 10900", b: ["Soundtracks & Other"], s: [3] },
+    "6": { a: "Various", t: "Disco Classics", y: 1990, py: 1990, f: "LP", l: "Salsoul", c: "SAL 1", b: ["Disco & Boogie"], s: [0] },
   },
   songs: [
     { k: "beyonce|crazy in love", a: "Beyoncé", t: "Crazy In Love", y: 2003, b: ["Pop"], v: [[3, "A1", "", 236, []]], m: ["First dance"] },
@@ -94,6 +101,39 @@ test("filters: occasion, moment, genre, decade, format", () => {
   assert.deepEqual(titles(search(index, "", { buckets: new Set(["Pop"]), decades: new Set([1970]) })), []);
 });
 
+test("genre and style dropdowns: a style matches through any version's record", () => {
+  assert.deepEqual(titles(search(index, "", { bucket: "Pop" })), ["Crazy In Love"]);
+  assert.deepEqual(titles(search(index, "", { bucket: "Disco & Boogie" })), ["I Feel Love", "You Make Me Feel", "Y.M.C.A."]);
+  assert.deepEqual(titles(search(index, "", { bucket: "Disco & Boogie", style: 0 })), ["I Feel Love", "You Make Me Feel", "Y.M.C.A."]);
+  // only the 12" of I Feel Love carries Hi NRG; the compilation version does not matter
+  assert.deepEqual(titles(search(index, "", { bucket: "Disco & Boogie", style: 1 })), ["I Feel Love"]);
+  assert.deepEqual(titles(search(index, "feel", { style: "0" })).sort(), ["I Feel Love", "You Make Me Feel"]);
+  assert.deepEqual(titles(search(index, "", { style: 4 })), []);
+});
+
+test("a style decides alone, even under another genre", () => {
+  // Hi NRG sits under Pop as well; picking it from Pop still finds the disco record
+  assert.deepEqual(titles(search(index, "", { bucket: "Pop", style: 1 })), ["I Feel Love"]);
+});
+
+test("the style dropdown lists a genre's styles that some song has, biggest first", () => {
+  const names = (b) => (index.genreStyles.get(b) || []).map((x) => `${x.name} ${x.count}`);
+  assert.deepEqual(names("Disco & Boogie"), ["Disco 3", "Hi NRG 1"]);
+  assert.deepEqual(names("Pop"), ["Hi NRG 1", "Pop Rock 1"]);     // ties go alphabetical; unused styles never show
+  assert.deepEqual(names("Soundtracks & Other"), ["Soundtrack 1"]);
+  assert.deepEqual([...index.bucketCounts], [["Pop", 1], ["Disco & Boogie", 3], ["Soundtracks & Other", 1]]);
+});
+
+test("a catalog from before styles still searches, with no style dropdown", () => {
+  const { styles, ...older } = SNAP;
+  const releases = Object.fromEntries(Object.entries(SNAP.releases).map(([k, { s, ...r }]) => [k, r]));
+  const old = buildIndex({ ...older, releases });
+  assert.equal(old.styles.length, 0);
+  assert.equal(old.genreStyles.size, 0);
+  assert.deepEqual(search(old, "", { bucket: "Pop" }).map((i) => old.songs[i].t), ["Crazy In Love"]);
+  assert.deepEqual(search(old, "", { style: 0 }), []);
+});
+
 test("no words and no filters lists every song in snapshot order", () => {
   assert.deepEqual(search(index, "   "), [0, 1, 2, 3, 4]);
 });
@@ -108,22 +148,28 @@ test("a 20,000-song catalog indexes and searches quickly", () => {
   const rnd = (n) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
   const word = () => Array.from({ length: 2 + rnd(3) }, () => syllables[rnd(syllables.length)]).join("");
   const releases = {};
-  for (let r = 1; r <= 5000; r++) releases[r] = { a: word(), t: `${word()} ${word()}`, y: 1970 + rnd(50), py: 1980, f: '12"', l: word(), c: "X", b: ["Pop"] };
+  const styles = Array.from({ length: 300 }, (_, k) => ({ n: `style ${k}`, b: ["Pop"] }));
+  for (let r = 1; r <= 5000; r++) {
+    releases[r] = { a: word(), t: `${word()} ${word()}`, y: 1970 + rnd(50), py: 1980, f: '12"', l: word(), c: "X", b: ["Pop"],
+      s: Array.from({ length: 1 + rnd(3) }, () => rnd(300)) };
+  }
   const songs = [];
   for (let i = 0; i < 20000; i++) {
     songs.push({ k: String(i), a: `${word()} ${word()}`, t: `${word()} ${word()} ${word()}`, y: 1970 + rnd(50), b: ["Pop"],
       v: [[1 + rnd(5000), "A1", rnd(4) ? "" : `${word()} mix`, 300, []]] });
   }
   const t0 = performance.now();
-  const big = buildIndex({ releases, songs, occasions: [] });
+  const big = buildIndex({ releases, songs, styles, occasions: [] });
   const built = performance.now() - t0;
   const probe = `${songs[123].a} ${songs[123].t.split(" ")[0]}`;
   const t1 = performance.now();
   const ids = search(big, probe);
   const typo = search(big, songs[456].t.split(" ")[0].replace(/^(.)(.)/, "$2$1"));
+  const styled = search(big, "", { bucket: "Pop", style: releases[1].s[0] });   // a style some record really has
   const searched = performance.now() - t1;
   assert.ok(ids.includes(123), "the probed song is found");
   assert.ok(typo.length > 0, "a swapped-letter typo still finds something");
+  assert.ok(styled.length > 0 && styled.length < songs.length, "a style narrows the list");
   assert.ok(built < 3000, `index built in ${built.toFixed(0)} ms`);
   assert.ok(searched < 500, `two searches took ${searched.toFixed(0)} ms`);
 });

@@ -43,11 +43,17 @@ export const FORMAT_SHORT = {
 };
 export const FORMAT_BIT = { '12"': 1, LP: 2, '7"': 4, '10"': 8, other: 16 };
 
+const NO_STYLES = new Uint16Array(0);
+
 export function buildIndex(snapshot) {
   const songs = snapshot.songs || [];
   const releases = snapshot.releases || {};
+  const styles = snapshot.styles || [];       // [{n: "Deep House", b: ["House"]}], absent before api 5.63
   const postings = new Map();                 // word -> [songIndex * 4 + field, ...]
   const formatsOf = new Uint8Array(songs.length);
+  const stylesOf = new Array(songs.length);   // song -> its versions' style ids
+  const styleCounts = new Uint32Array(styles.length);
+  const bucketCounts = new Map();             // "House" -> songs in it
   const decades = new Map();                  // 1970 -> songs from the 70s
 
   for (let i = 0; i < songs.length; i++) {
@@ -69,6 +75,7 @@ export function buildIndex(snapshot) {
     add(s.t, TITLE, true);
     add(s.a, ARTIST, true);
     let mask = 0;
+    const own = new Set();
     for (const v of s.v || []) {
       const [rid, , mix, , credits] = v;
       if (mix) add(mix, MIX, false);
@@ -78,9 +85,13 @@ export function buildIndex(snapshot) {
         add(r.t, RECORD, false);
         add(r.l, RECORD, false);
         mask |= FORMAT_BIT[r.f] || FORMAT_BIT.other;
+        for (const id of r.s || []) if (id >= 0 && id < styles.length) own.add(id);
       }
     }
     formatsOf[i] = mask;
+    stylesOf[i] = own.size ? Uint16Array.from(own) : NO_STYLES;
+    for (const id of own) styleCounts[id]++;
+    for (const b of s.b || []) bucketCounts.set(b, (bucketCounts.get(b) || 0) + 1);
     for (const [w, field] of best) {
       let list = postings.get(w);
       if (!list) postings.set(w, (list = []));
@@ -95,6 +106,19 @@ export function buildIndex(snapshot) {
   const occasionMoments = {};
   for (const o of snapshot.occasions || []) occasionMoments[o.name] = o.moments || [];
 
+  // The style dropdown under each genre: its styles that some song has, biggest first.
+  const genreStyles = new Map();
+  styles.forEach((st, id) => {
+    if (!styleCounts[id]) return;
+    for (const b of st.b || []) {
+      if (!genreStyles.has(b)) genreStyles.set(b, []);
+      genreStyles.get(b).push({ id, name: st.n, count: styleCounts[id] });
+    }
+  });
+  for (const list of genreStyles.values()) {
+    list.sort((x, y) => y.count - x.count || x.name.localeCompare(y.name));
+  }
+
   const vocab = [...postings.keys()].sort();
   const byLength = [];                        // the typo scan only reads words of a near length
   for (const w of vocab) (byLength[w.length] ||= []).push(w);
@@ -106,6 +130,11 @@ export function buildIndex(snapshot) {
     vocab,
     byLength,
     formatsOf,
+    styles,
+    stylesOf,
+    styleCounts,
+    bucketCounts,
+    genreStyles,
     decades: [...decades.entries()].sort((a, b) => a[0] - b[0]),
     occasionMoments,
   };
@@ -193,6 +222,14 @@ export function makeFilter(index, f = {}) {
   } else if (f.occasion) {
     const wanted = new Set(index.occasionMoments[f.occasion] || []);
     checks.push((i) => (songs[i].m || []).some((m) => wanted.has(m)));
+  }
+  // A style is the narrower choice, so it decides alone: any version on a
+  // record with that style counts, whatever the song's own genre buckets.
+  if (f.style != null && f.style !== "") {
+    const id = Number(f.style);
+    checks.push((i) => index.stylesOf[i].includes(id));
+  } else if (f.bucket) {
+    checks.push((i) => (songs[i].b || []).includes(f.bucket));
   }
   if (f.buckets && f.buckets.size) {
     checks.push((i) => (songs[i].b || []).some((b) => f.buckets.has(b)));

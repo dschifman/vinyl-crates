@@ -1,4 +1,5 @@
-// app.js -- the Crates page: one search box, filter chips, and the song list.
+// app.js -- the Crates page: a search box, genre and style dropdowns, filter
+// chips, and the song list.
 // The whole catalog arrives once from /api/catalog and is searched here, in
 // the browser (search.js). Everything shown is built with textContent, never
 // innerHTML: catalog text is data, not markup.
@@ -14,7 +15,7 @@ const state = {
   index: null,
   results: [],
   shown: 0,
-  filters: { occasion: null, moment: null, buckets: new Set(), decades: new Set(), formats: new Set() },
+  filters: { occasion: null, moment: null, bucket: null, style: null, decades: new Set(), formats: new Set() },
 };
 
 main();
@@ -130,12 +131,70 @@ function renderMoments() {
   }
 }
 
+function option(value, label) {
+  const o = document.createElement("option");
+  o.value = value;
+  o.textContent = label;
+  return o;
+}
+
+function picker(id, label) {
+  const wrap = el("label", "picker");
+  const sel = el("select");
+  sel.id = id;
+  sel.setAttribute("aria-label", label);
+  wrap.append(sel);
+  return { wrap, sel };
+}
+
+// Genre, then a style within it (the owner's pick, 2026-10-01), always in view.
+function genreRow() {
+  const { snap, index, filters: f } = state;
+  const row = el("div", "pickers");
+  const genre = picker("genre", "Genre");
+  genre.sel.append(option("", "All genres"));
+  for (const b of snap.buckets || []) {
+    const n = index.bucketCounts.get(b);
+    if (n) genre.sel.append(option(b, b));      // plain names: a count makes the closed box truncate on a phone
+  }
+  genre.sel.addEventListener("change", () => {
+    f.bucket = genre.sel.value || null;
+    f.style = null;
+    fillStyles();
+    run();
+  });
+  row.append(genre.wrap);
+  if (index.styles.length) {
+    const style = picker("style", "Style");
+    style.sel.addEventListener("change", () => {
+      f.style = style.sel.value === "" ? null : Number(style.sel.value);
+      run();
+    });
+    row.append(style.wrap);
+  } else {
+    row.classList.add("single");                // a catalog from before api 5.63 has no styles
+  }
+  return row;
+}
+
+function fillStyles() {
+  const sel = $("style");
+  if (!sel) return;
+  const f = state.filters;
+  const list = f.bucket ? state.index.genreStyles.get(f.bucket) || [] : [];
+  sel.replaceChildren(option("", f.bucket ? "All styles" : "Style"));
+  for (const { id, name } of list) sel.append(option(String(id), name));    // biggest first
+  sel.disabled = !list.length;
+  sel.value = f.style == null ? "" : String(f.style);
+}
+
 function renderFilters() {
   const box = $("filters");
   const { snap, index, filters: f } = state;
   box.replaceChildren();
+  box.append(genreRow());
 
-  // Weddings and mitzvahs matter more than any genre, so they come first.
+  // Weddings and mitzvahs come next: they matter more than any decade or format.
   if (snap.occasions?.length) {
     const occ = row("Occasion");
     for (const o of snap.occasions) {
@@ -154,7 +213,7 @@ function renderFilters() {
     box.append(occ.wrap, moments.wrap);
   }
 
-  // Genre, decade and format fold away, so the songs start higher on a phone.
+  // Decade and format fold away, so the songs start higher on a phone.
   const toggle = el("button", "toggle", "More filters");
   toggle.type = "button";
   toggle.id = "toggle";
@@ -168,35 +227,38 @@ function renderFilters() {
     toggle.setAttribute("aria-expanded", String(!open));
     extra.hidden = open;
   });
-  extra.append(multiRow("Genre", (snap.buckets || []).map((b) => [b, b]), f.buckets));
   extra.append(multiRow("Decade", index.decades.map(([d]) => [d, `${d}s`]), f.decades));
   let present = 0;
   for (const m of index.formatsOf) present |= m;
   const formats = FORMATS.filter((x) => present & FORMAT_BIT[x]);
   extra.append(multiRow("Format", formats.map((x) => [x, FORMAT_LABELS[x]]), f.formats));
   box.append(toggle, extra);
+  fillStyles();
 }
 
 function syncToggle() {
   const f = state.filters;
-  const n = f.buckets.size + f.decades.size + f.formats.size;
+  const n = f.decades.size + f.formats.size;
   const toggle = $("toggle");
   if (toggle) toggle.textContent = n ? `More filters · ${n} on` : "More filters";
 }
 
 function anyFilter() {
   const f = state.filters;
-  return Boolean(f.occasion || f.moment || f.buckets.size || f.decades.size || f.formats.size);
+  return Boolean(f.occasion || f.moment || f.bucket || f.style != null || f.decades.size || f.formats.size);
 }
 
 function clearFilters() {
   const f = state.filters;
   f.occasion = null;
   f.moment = null;
-  f.buckets.clear();
+  f.bucket = null;
+  f.style = null;
   f.decades.clear();
   f.formats.clear();
   for (const b of $("filters").querySelectorAll(".chip")) b.setAttribute("aria-pressed", "false");
+  $("genre").value = "";
+  fillStyles();
   renderMoments();
   run();
 }

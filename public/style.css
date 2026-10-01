@@ -75,6 +75,35 @@ main, .foot { max-width: 760px; margin: 0 auto; }
 .top > * { max-width: 760px; margin-left: auto; margin-right: auto; }
 
 .filters { padding: 8px 0 0; }
+.pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 2px 16px 6px; }
+.pickers.single { grid-template-columns: 1fr; }
+.picker { position: relative; display: block; min-width: 0; }
+/* the arrow is text, not an image: the CSP allows nothing but 'self' */
+.picker::after {
+  content: "▾";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.picker select {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  font: inherit;
+  font-size: 16px;                /* under 16px, iOS zooms the page on focus */
+  padding: 9px 30px 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.picker select:disabled { color: var(--muted); cursor: default; }
+.picker select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row { display: flex; align-items: center; gap: 8px; padding: 4px 0 4px 16px; }
 .row-label {
   flex: none;

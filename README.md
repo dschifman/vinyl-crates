@@ -23,8 +23,12 @@ vinyl-command
 - **The whole catalog loads once** (15,293 songs, 0.71 MB gzipped on 2026-10-01) and is
   searched in the browser by `public/search.js`. The search forgives typos ("dona sumer",
   "mikael jakson"), matches prefixes ("sylv") and ignores accents and punctuation
-  ("beyonce", "ymca"). Indexing takes ~110 ms; a search takes under 10 ms. Weddings and
-  bar/bat mitzvahs come first among the filters, ahead of genre, decade and format.
+  ("beyonce", "ymca"). Indexing takes ~110 ms; a search takes under 10 ms.
+- **Filters:** a Genre dropdown and a Style dropdown inside it sit under the search box
+  (House → Deep House, Garage House …; the styles are Discogs', carried by the snapshot
+  since vinyl-command api 5.63). Weddings and bar/bat mitzvahs come next, then decade and
+  format under "More filters". A style matches a song when any of its versions is on a
+  record with that style.
 - **▶ Listen** opens a YouTube search for the song. No audio is hosted.
 
 ## Security

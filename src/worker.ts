@@ -27,7 +27,7 @@ export interface Env {
 
 // One running counter, bumped by every PR that changes behaviour (the same rule as
 // vinyl-command's api/worker and the iOS app). The page shows it in its footer.
-export const VERSION = "1.1";
+export const VERSION = "1.2";
 
 export const CURRENT_KEY = "current.json";
 export const SNAPSHOT_PREFIX = "snapshots/";
