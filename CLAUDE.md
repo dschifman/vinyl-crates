@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # vinyl-crates — Crates, the client catalog site
 
 A Cloudflare Worker, plus a static page, at **crates.bobshrimp.com**: the login-only,
