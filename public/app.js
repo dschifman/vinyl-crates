@@ -1,26 +1,38 @@
-// app.js -- the Crates page: one search box, filter chips, and the song list.
+// app.js -- the Crates page: a search box, genre and style dropdowns, filter
+// chips, the song list, and the client's own request list (list.js).
 // The whole catalog arrives once from /api/catalog and is searched here, in
 // the browser (search.js). Everything shown is built with textContent, never
 // innerHTML: catalog text is data, not markup.
 
 import { buildIndex, search, FORMATS, FORMAT_LABELS, FORMAT_SHORT, FORMAT_BIT } from "./search.js";
+import { api } from "./api.js";
+import { el, fmt, option, toast } from "./dom.js";
+import { createLists } from "./list.js";
 
 const PAGE = 40;
 const $ = (id) => document.getElementById(id);
-const fmt = (n) => Number(n).toLocaleString("en-US");
 
 const state = {
   snap: null,
   index: null,
   results: [],
   shown: 0,
-  filters: { occasion: null, moment: null, buckets: new Set(), decades: new Set(), formats: new Set() },
+  filters: { occasion: null, moment: null, bucket: null, style: null, decades: new Set(), formats: new Set() },
 };
+
+// The client's list: the plus buttons, the "My list" count and the list view
+// all redraw from it after every change.
+const lists = createLists(() => {
+  syncMyList();
+  if (!$("listview").hidden) lists.render($("listview-body"));
+  for (const b of document.querySelectorAll("#songs .plus")) syncPlus(b);
+});
 
 main();
 
 async function main() {
-  loadWho();
+  loadMe();
+  window.addEventListener("hashchange", showView);
   let snap;
   try {
     const res = await fetch("/api/catalog", { headers: { Accept: "application/json" } });
@@ -43,21 +55,52 @@ async function main() {
   q.addEventListener("keydown", (e) => {
     if (e.key === "Enter") q.blur();          // put the phone keyboard away
   });
+  q.addEventListener("focus", () => {
+    if (location.hash === "#list") location.hash = "";   // searching means the crates
+  });
   $("clear").addEventListener("click", clearFilters);
   $("more").addEventListener("click", more);
   renderFilters();
   run();
 }
 
-async function loadWho() {
+async function loadMe() {
+  let me;
   try {
-    const res = await fetch("/api/me");
-    if (!res.ok) return;
-    const me = await res.json();
-    if (me.email) $("who").textContent = `${me.email} · `;
-    if (me.version) $("version").textContent = ` · Crates ${me.version}`;
+    me = await api("GET", "/api/me");
   } catch {
-    /* the footer simply stays shorter */
+    return;                                     // the footer stays shorter and lists stay off
+  }
+  if (me.email) $("who").textContent = `${me.email} · `;
+  if (me.version) $("version").textContent = ` · Crates ${me.version}`;
+  if (me.owner) $("djlink").hidden = false;
+  try {
+    await lists.init(me);
+    $("mylist").hidden = false;
+    $("mylist").addEventListener("click", () => {
+      location.hash = location.hash === "#list" ? "" : "#list";
+    });
+    $("listback").addEventListener("click", () => history.length > 1 ? history.back() : (location.hash = ""));
+    showView();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+function syncMyList() {
+  const n = lists.count();
+  $("mylist").textContent = n ? `My list · ${fmt(n)}` : "My list";
+}
+
+// "#list" shows the client's list; anything else, the crates.
+function showView() {
+  const listing = location.hash === "#list" && lists.current();
+  $("catalog").hidden = Boolean(listing);
+  $("listview").hidden = !listing;
+  $("mylist").setAttribute("aria-pressed", String(Boolean(listing)));
+  if (listing) {
+    lists.render($("listview-body"));
+    window.scrollTo(0, 0);
   }
 }
 
@@ -69,13 +112,6 @@ function notice(message) {
 }
 
 // ---------------------------------------------------------------- filters
-
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-}
 
 function chip(label, value, onClick) {
   const b = el("button", "chip", label);
@@ -130,12 +166,63 @@ function renderMoments() {
   }
 }
 
+function picker(id, label) {
+  const wrap = el("label", "picker");
+  const sel = el("select");
+  sel.id = id;
+  sel.setAttribute("aria-label", label);
+  wrap.append(sel);
+  return { wrap, sel };
+}
+
+// Genre, then a style within it (the owner's pick, 2026-10-01), always in view.
+function genreRow() {
+  const { snap, index, filters: f } = state;
+  const row = el("div", "pickers");
+  const genre = picker("genre", "Genre");
+  genre.sel.append(option("", "All genres"));
+  for (const b of snap.buckets || []) {
+    const n = index.bucketCounts.get(b);
+    if (n) genre.sel.append(option(b, b));      // plain names: a count makes the closed box truncate on a phone
+  }
+  genre.sel.addEventListener("change", () => {
+    f.bucket = genre.sel.value || null;
+    f.style = null;
+    fillStyles();
+    run();
+  });
+  row.append(genre.wrap);
+  if (index.styles.length) {
+    const style = picker("style", "Style");
+    style.sel.addEventListener("change", () => {
+      f.style = style.sel.value === "" ? null : Number(style.sel.value);
+      run();
+    });
+    row.append(style.wrap);
+  } else {
+    row.classList.add("single");                // a catalog from before api 5.63 has no styles
+  }
+  return row;
+}
+
+function fillStyles() {
+  const sel = $("style");
+  if (!sel) return;
+  const f = state.filters;
+  const list = f.bucket ? state.index.genreStyles.get(f.bucket) || [] : [];
+  sel.replaceChildren(option("", f.bucket ? "All styles" : "Style"));
+  for (const { id, name } of list) sel.append(option(String(id), name));    // biggest first
+  sel.disabled = !list.length;
+  sel.value = f.style == null ? "" : String(f.style);
+}
+
 function renderFilters() {
   const box = $("filters");
   const { snap, index, filters: f } = state;
   box.replaceChildren();
+  box.append(genreRow());
 
-  // Weddings and mitzvahs matter more than any genre, so they come first.
+  // Weddings and mitzvahs come next: they matter more than any decade or format.
   if (snap.occasions?.length) {
     const occ = row("Occasion");
     for (const o of snap.occasions) {
@@ -154,7 +241,7 @@ function renderFilters() {
     box.append(occ.wrap, moments.wrap);
   }
 
-  // Genre, decade and format fold away, so the songs start higher on a phone.
+  // Decade and format fold away, so the songs start higher on a phone.
   const toggle = el("button", "toggle", "More filters");
   toggle.type = "button";
   toggle.id = "toggle";
@@ -168,43 +255,57 @@ function renderFilters() {
     toggle.setAttribute("aria-expanded", String(!open));
     extra.hidden = open;
   });
-  extra.append(multiRow("Genre", (snap.buckets || []).map((b) => [b, b]), f.buckets));
   extra.append(multiRow("Decade", index.decades.map(([d]) => [d, `${d}s`]), f.decades));
   let present = 0;
   for (const m of index.formatsOf) present |= m;
   const formats = FORMATS.filter((x) => present & FORMAT_BIT[x]);
   extra.append(multiRow("Format", formats.map((x) => [x, FORMAT_LABELS[x]]), f.formats));
   box.append(toggle, extra);
+  fillStyles();
 }
 
 function syncToggle() {
   const f = state.filters;
-  const n = f.buckets.size + f.decades.size + f.formats.size;
+  const n = f.decades.size + f.formats.size;
   const toggle = $("toggle");
   if (toggle) toggle.textContent = n ? `More filters · ${n} on` : "More filters";
 }
 
 function anyFilter() {
   const f = state.filters;
-  return Boolean(f.occasion || f.moment || f.buckets.size || f.decades.size || f.formats.size);
+  return Boolean(f.occasion || f.moment || f.bucket || f.style != null || f.decades.size || f.formats.size);
 }
 
 function clearFilters() {
   const f = state.filters;
   f.occasion = null;
   f.moment = null;
-  f.buckets.clear();
+  f.bucket = null;
+  f.style = null;
   f.decades.clear();
   f.formats.clear();
   for (const b of $("filters").querySelectorAll(".chip")) b.setAttribute("aria-pressed", "false");
+  $("genre").value = "";
+  fillStyles();
   renderMoments();
   run();
 }
 
 // ---------------------------------------------------------------- results
 
+// A search that finds nothing, with no filters on, tells the DJ what clients want
+// and the crates lack. Sent once per phrase, after typing stops; no identity kept.
+const missed = new Set();
+const noteMiss = debounce(() => {
+  const q = $("q").value.trim();
+  if (q.length < 3 || state.results.length || anyFilter() || missed.has(q.toLowerCase())) return;
+  missed.add(q.toLowerCase());
+  api("POST", "/api/misses", { q }).catch(() => {});
+}, 1500);
+
 function run() {
   state.results = search(state.index, $("q").value, state.filters);
+  noteMiss();
   state.shown = 0;
   $("songs").replaceChildren();
   const n = state.results.length;
@@ -251,6 +352,7 @@ function youtube(s) {
 function versionsList(s) {
   const ul = el("ul");
   for (const [rid, pos, mix, secs, credits] of s.v) {
+    const key = `${rid}:${pos}`;
     const r = state.snap.releases[String(rid)] || {};
     const li = el("li");
     li.append(el("strong", null, r.t || "Untitled record"));
@@ -266,6 +368,22 @@ function versionsList(s) {
     if (secs) bits.push(duration(secs));
     if (credits && credits.length) bits.push(`remix/edit: ${credits.join(", ")}`);
     li.append(document.createTextNode(` — ${bits.join(" · ")}`));
+    if (lists.current() && lists.open()) {
+      const chosen = lists.has(s.k)?.version_key === key;
+      const pick = el("button", "pickversion", chosen ? "✓ This version" : "+ This version");
+      pick.type = "button";
+      pick.disabled = chosen;
+      pick.addEventListener("click", async () => {
+        try {
+          await lists.add(s, { key, mix: mix || null });
+          pick.textContent = "✓ This version";
+          pick.disabled = true;
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+      li.append(" ", pick);
+    }
     ul.append(li);
   }
   return ul;
@@ -291,6 +409,13 @@ function songRow(i) {
     head.append(tags);
   }
 
+  const plus = el("button", "plus");
+  plus.type = "button";
+  plus.dataset.key = s.k;
+  plus.dataset.i = String(i);
+  syncPlus(plus);
+  plus.addEventListener("click", () => togglePlus(plus));
+
   const listen = el("a", "listen", "▶ Listen");
   listen.href = youtube(s);
   listen.target = "_blank";
@@ -306,8 +431,40 @@ function songRow(i) {
     detail.hidden = open;
   });
 
-  li.append(head, listen, detail);
+  const side = el("div", "side");
+  side.append(plus, listen);
+  li.append(head, side, detail);
   return li;
+}
+
+function syncPlus(b) {
+  const ready = Boolean(lists.current());
+  const r = ready ? lists.has(b.dataset.key) : null;
+  const s = state.index.songs[Number(b.dataset.i)];
+  b.hidden = !ready;
+  b.textContent = r ? "✓" : "⊕";
+  b.disabled = ready && !lists.open();
+  b.setAttribute("aria-pressed", String(Boolean(r)));
+  b.setAttribute("aria-label", r ? `Remove ${s.t} from your list` : `Add ${s.t} to your list`);
+  b.title = !lists.open() ? "Requests are closed" : r ? "On your list (tap to remove)" : "Add to your list";
+}
+
+async function togglePlus(b) {
+  const s = state.index.songs[Number(b.dataset.i)];
+  const r = lists.has(s.k);
+  b.disabled = true;
+  try {
+    if (r) {
+      await lists.remove(r.id);
+      toast("Removed from your list.", "ok");
+    } else {
+      await lists.add(s);
+    }
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    syncPlus(b);
+  }
 }
 
 function debounce(fn, ms) {

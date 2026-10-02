@@ -73,11 +73,36 @@ test("a visitor gets the page with security headers, and who they are", async ()
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) assert.equal(page.headers.get(k), v, k);
   assert.equal(page.headers.get("Cache-Control"), "no-cache");
   assert.equal(page.headers.get("ETag"), '"page"');
-  const me = await call(e, "/api/me", { token: await visitor() });
-  assert.deepEqual(await me.json(), { email: "client@example.com", version: VERSION });
+  const me = await (await call(e, "/api/me", { token: await visitor() })).json();
+  assert.equal(me.email, "client@example.com");
+  assert.equal(me.version, VERSION);
+  assert.equal(me.owner, false);
   assert.equal(page.headers.get("X-Crates-Version"), VERSION);
   assert.equal((await call(e, "/api/nope", { token: await visitor() })).status, 404);
   assert.equal((await call(e, "/api/catalog", { token: await visitor(), method: "POST" })).status, 405);
+});
+
+test("the DJ's page and API are the owner's alone", async () => {
+  const e = env();
+  const owner = await sign(team, { aud: [AUD_SITE], email: "DJ@Example.com" });   // case doesn't matter
+  for (const path of ["/dj", "/dj/", "/dj.html", "/dj.js", "/dj.css"]) {
+    assert.equal((await call(e, path, { token: await visitor() })).status, 404, path);
+    assert.equal((await call(e, path, { token: owner })).status, 200, path);
+  }
+  assert.equal((await call(e, "/api/dj/overview", { token: await visitor() })).status, 403);
+  assert.equal((await call(e, "/api/dj/overview", { token: owner })).status, 200);
+  assert.equal((await (await call(e, "/api/me", { token: owner })).json()).owner, true);
+  // no owner configured: nobody is the owner
+  assert.equal((await call(env({ OWNER_EMAIL: "" }), "/api/dj/overview", { token: owner })).status, 403);
+});
+
+test("the Living Room mini's feed takes the publisher's token only", async () => {
+  const e = env();
+  assert.equal((await call(e, "/api/admin/invites", { token: await publisher() })).status, 200);
+  assert.equal((await call(e, "/api/admin/changes", { token: await publisher() })).status, 200);
+  assert.equal((await call(e, "/api/admin/invites", { token: await visitor() })).status, 403);
+  const stranger = await sign(team, { aud: [AUD_ADMIN], common_name: "someone-else.access" });
+  assert.equal((await call(e, "/api/admin/purge", { token: stranger, method: "POST" })).status, 403);
 });
 
 test("before the first publish the catalog says so", async () => {
